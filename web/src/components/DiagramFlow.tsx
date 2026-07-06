@@ -78,6 +78,44 @@ export default function DiagramFlow() {
         <IsoPlane key={stage.label} cx={CX} cy={stage.cy} opacity={0.22 + i * 0.06} />
       ))}
 
+      {/* Signature animation: a soft pulse travels down the pipeline, plane
+          then connector then plane, on a shared 3.5s loop. Positive delays
+          (in strict top-to-bottom order) plus fill-mode "both" so each
+          element sits dim until its turn, rather than negative delays -
+          those looked correct in isolation but the modulo wraparound
+          against a short 6%-of-cycle peak window scrambled the visual
+          order (verified by sampling computed opacity over time). */}
+      {STAGES.map((stage, i) => (
+        <polygon
+          key={`plane-glow-${stage.label}`}
+          points={isoRhombus(CX, stage.cy, R)}
+          fill="none"
+          stroke="#c4b5fd"
+          strokeWidth={2.5}
+          opacity={0.2}
+          className="pipeline-pulse-el"
+          style={{ animationDelay: `${i * 1}s`, animationFillMode: "both" }}
+        />
+      ))}
+      {STAGES.slice(0, -1).map((stage, i) => {
+        const next = STAGES[i + 1];
+        return (
+          <line
+            key={`connector-glow-${stage.label}`}
+            x1={CX}
+            y1={stage.cy + R + DEPTH}
+            x2={CX}
+            y2={next.cy - R}
+            stroke="#a78bfa"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            opacity={0.2}
+            className="pipeline-pulse-el"
+            style={{ animationDelay: `${(i * 2 + 1) * 0.5}s`, animationFillMode: "both" }}
+          />
+        );
+      })}
+
       {STAGES.map((stage, i) => (
         <text
           key={`label-${stage.label}`}

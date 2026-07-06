@@ -19,10 +19,10 @@ export default function Hero() {
         </h1>
 
         <p className="mt-6 w-full max-w-2xl text-balance break-words text-base leading-relaxed text-ink-body sm:text-lg">
-          Valiquo is a negotiated-price payment layer in front of live financial and on-chain
-          intelligence data. Buyer agents propose a price, the seller counters or accepts, and
-          settlement happens on-chain via Circle Gateway and x402 — no fixed price lists, no
-          manual invoicing.
+          Valiquo is a negotiation and settlement layer for live financial and on-chain
+          intelligence. Buyer agents propose a price, providers accept or counter, and payment
+          settles on-chain through Circle Gateway and x402. No fixed price menus, no manual
+          billing.
         </p>
 
         <div className="mt-10 flex w-full flex-col items-center gap-3 sm:w-auto sm:flex-row sm:justify-center">

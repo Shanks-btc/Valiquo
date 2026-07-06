@@ -5,6 +5,7 @@ import HowItWorks from "@/components/HowItWorks";
 import FlowDiagramSection from "@/components/FlowDiagramSection";
 import ProofSection from "@/components/ProofSection";
 import NegotiationSection from "@/components/NegotiationSection";
+import Reveal from "@/components/Reveal";
 
 export default function Home() {
   return (
@@ -12,11 +13,21 @@ export default function Home() {
       <Nav />
       <main className="w-full max-w-full">
         <Hero />
-        <ProblemSection />
-        <HowItWorks />
-        <FlowDiagramSection />
-        <ProofSection />
-        <NegotiationSection />
+        <Reveal>
+          <ProblemSection />
+        </Reveal>
+        <Reveal>
+          <HowItWorks />
+        </Reveal>
+        <Reveal>
+          <FlowDiagramSection />
+        </Reveal>
+        <Reveal>
+          <ProofSection />
+        </Reveal>
+        <Reveal>
+          <NegotiationSection />
+        </Reveal>
       </main>
     </>
   );

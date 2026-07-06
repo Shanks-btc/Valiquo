@@ -5,6 +5,7 @@ import DecisionsChart from "@/components/DecisionsChart";
 import ActivityTable from "@/components/ActivityTable";
 import NegotiationSection from "@/components/NegotiationSection";
 import ToolBreakdown from "@/components/ToolBreakdown";
+import AnimatedNumber from "@/components/AnimatedNumber";
 import PricingTable from "@/components/PricingTable";
 import SavingsCallout from "@/components/SavingsCallout";
 import SettlementFooter from "@/components/SettlementFooter";
@@ -93,10 +94,10 @@ export default async function DashboardPage() {
           </div>
 
           <div className="mx-auto mt-10 grid w-full max-w-6xl grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            <StatCard label="Total negotiations" value={String(total)} />
+            <StatCard label="Total negotiations" value={<AnimatedNumber target={total} />} />
             <StatCard
               label="Acceptance rate"
-              value={`${acceptanceRate}%`}
+              value={<AnimatedNumber target={acceptanceRate} suffix="%" />}
               sublabel={total > 0 ? `${acceptedSessions.length} of ${total} accepted` : "no data yet"}
             />
             <StatCard
@@ -110,7 +111,13 @@ export default async function DashboardPage() {
             />
             <StatCard
               label="Average agreed price"
-              value={avgPrice !== null ? `$${avgPrice.toFixed(4)}` : "—"}
+              value={
+                avgPrice !== null ? (
+                  <AnimatedNumber target={avgPrice} prefix="$" decimals={4} />
+                ) : (
+                  "—"
+                )
+              }
               sublabel={
                 avgPrice !== null
                   ? `across ${acceptedPrices.length} accepted deal${acceptedPrices.length === 1 ? "" : "s"}`

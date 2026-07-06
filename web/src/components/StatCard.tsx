@@ -4,7 +4,7 @@ export default function StatCard({
   sublabel,
 }: {
   label: string;
-  value: string;
+  value: React.ReactNode;
   sublabel?: string;
 }) {
   return (

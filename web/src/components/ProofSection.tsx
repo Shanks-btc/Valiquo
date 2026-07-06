@@ -18,11 +18,11 @@ export default async function ProofSection() {
           Proof, not promises
         </span>
         <h2 className="mt-4 w-full text-balance break-words font-display text-2xl font-bold text-ink-heading sm:text-3xl">
-          A real negotiation, pulled live from the backend.
+          A real negotiation, rendered from the live backend.
         </h2>
         <p className="mt-3 w-full max-w-xl text-balance break-words text-sm leading-relaxed text-ink-body sm:text-base">
-          This card is rendered from a live <code>GET /activity</code> call
-          against the running Valiquo server — not marketing art.
+          This card is rendered from <code>GET /activity</code> on the running
+          Valiquo server — not static demo data.
         </p>
 
         <div className="mt-10 w-full max-w-sm min-w-0">
@@ -51,7 +51,10 @@ export default async function ProofSection() {
               </p>
 
               <div className="mt-6 flex min-w-0 items-center gap-2 border-t border-subtle pt-4">
-                <span className="h-2 w-2 shrink-0 rounded-full bg-success" />
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="absolute inline-flex h-full w-full animate-ping-slow rounded-full bg-success opacity-70" />
+                  <span className="relative inline-flex h-2 w-2 rounded-full bg-success" />
+                </span>
                 <span className="min-w-0 truncate text-xs font-bold uppercase tracking-wide text-success">
                   {isFulfilled ? "Intelligence Delivered" : "Negotiation Settled"}
                 </span>

@@ -4,7 +4,7 @@ const POINTS = [
     body: "Most machine-readable APIs charge the same flat rate per call, no matter what the request is actually worth in the moment.",
   },
   {
-    title: "Under- or over-priced",
+    title: "Wrong price, wrong incentives",
     body: "That rigidity overcharges low-value requests and leaves high-value ones underpriced — with no way for either side to say what they're actually willing to pay or accept.",
   },
   {
@@ -21,7 +21,7 @@ export default function ProblemSection() {
           The problem
         </span>
         <h2 className="mt-4 w-full text-balance break-words font-display text-2xl font-bold text-ink-heading sm:text-3xl">
-          One price doesn&apos;t fit one request.
+          A fixed price cannot reflect every request.
         </h2>
       </div>
 

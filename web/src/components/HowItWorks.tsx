@@ -21,7 +21,7 @@ const STEPS = [
     number: "04",
     title: "Deliver",
     description:
-      "The seller calls the live intelligence tool and returns the data, with delivery guaranteed once payment has landed.",
+      "The seller calls the live intelligence tool and returns the data, with delivery guaranteed once payment has landed. Responses are returned as machine-readable data, ready for downstream agent use.",
   },
 ];
 
