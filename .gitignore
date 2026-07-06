@@ -2,5 +2,5 @@
 .env
 logs/
 *.log
-
-web/
+web/node_modules/
+web/.next/

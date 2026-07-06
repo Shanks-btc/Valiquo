@@ -63,6 +63,9 @@ interface Quote {
   state: QuoteState;
   negotiationId: string;
   round: number;
+  // Recorded at creation so /activity can tell an open accept apart from an
+  // unresolved counter - both look identical via `state` alone until paid.
+  decision: "accept" | "counter";
   // Set when payment settled (state is FULFILLED) but callMcpTool() kept
   // failing after retries - a "paid, undelivered" record, kept visible
   // rather than silently dropped.
@@ -75,6 +78,18 @@ const quotes = new Map<string, Quote>();
 // negotiation session to a handful of back-and-forth offers.
 const MAX_NEGOTIATION_ROUNDS = 5;
 const negotiationRounds = new Map<string, number>();
+
+// Lightweight record of rejected proposals for /activity. A reject never
+// creates a Quote, so without this a rejection would leave zero trace.
+// Deliberately excludes proposedPrice/reason - activity metadata should
+// never leak how close a lowball offer was to the real cost floor.
+interface Rejection {
+  tool: string;
+  negotiationId: string;
+  round: number;
+  createdAt: number;
+}
+const rejections: Rejection[] = [];
 
 function nextNegotiationRound(negotiationId: string): number {
   const round = (negotiationRounds.get(negotiationId) ?? 0) + 1;
@@ -126,6 +141,7 @@ app.post("/quote", (req, res) => {
   const round = nextNegotiationRound(negotiationId);
 
   if (round > MAX_NEGOTIATION_ROUNDS) {
+    rejections.push({ tool, negotiationId, round, createdAt: Date.now() });
     res.status(200).json({
       decision: "reject",
       reason: `Max negotiation rounds (${MAX_NEGOTIATION_ROUNDS}) exceeded for this session.`,
@@ -138,6 +154,7 @@ app.post("/quote", (req, res) => {
   const result = decide(tool, proposedPrice);
 
   if (result.decision === "reject") {
+    rejections.push({ tool, negotiationId, round, createdAt: Date.now() });
     res.status(200).json({ decision: "reject", reason: result.reason, negotiationId, round });
     return;
   }
@@ -152,6 +169,7 @@ app.post("/quote", (req, res) => {
     state: "OPEN",
     negotiationId,
     round,
+    decision: result.decision,
   });
 
   res.status(200).json({
@@ -164,6 +182,61 @@ app.post("/quote", (req, res) => {
     negotiationId,
     round,
   });
+});
+
+// GET /activity - metadata about past negotiations (never the paid BTC
+// Cycle Intelligence content itself, and never a rejected proposal's
+// price/reason - see the Rejection comment above). Reads straight from the
+// in-memory quotes/rejections state, so like the rest of this store it does
+// not survive a server restart.
+//
+// Decision derivation:
+// - FULFILLED or PROCESSING: someone has already committed to paying this
+//   quote's agreedPrice, so it counts as "accepted" regardless of whether
+//   that price arrived via an immediate accept or a countered price that
+//   was paid later.
+// - OPEN: falls back to the decision recorded on the Quote at creation
+//   time, since an open accept and an unresolved counter are otherwise
+//   indistinguishable from stored state alone.
+// - Entries with no Quote at all (rejections) are always "rejected".
+const DEFAULT_ACTIVITY_LIMIT = 100;
+
+app.get("/activity", (req, res) => {
+  const limitParam = Number(req.query.limit);
+  const limit =
+    Number.isFinite(limitParam) && limitParam > 0 ? Math.floor(limitParam) : DEFAULT_ACTIVITY_LIMIT;
+
+  const fromQuotes = Array.from(quotes.values()).map((quote) => ({
+    quoteId: quote.id,
+    negotiationId: quote.negotiationId,
+    round: quote.round,
+    tool: quote.tool,
+    decision:
+      quote.state === "FULFILLED" || quote.state === "PROCESSING" || quote.decision === "accept"
+        ? ("accepted" as const)
+        : ("countered" as const),
+    agreedPrice: quote.agreedPrice,
+    createdAt: quote.createdAt,
+    state: quote.state as string,
+  }));
+
+  const fromRejections = rejections.map((r) => ({
+    quoteId: null as string | null,
+    negotiationId: r.negotiationId,
+    round: r.round,
+    tool: r.tool,
+    decision: "rejected" as const,
+    agreedPrice: null as number | null,
+    createdAt: r.createdAt,
+    state: null as string | null,
+  }));
+
+  const activity = [...fromQuotes, ...fromRejections]
+    .sort((a, b) => b.createdAt - a.createdAt)
+    .slice(0, limit)
+    .map((entry) => ({ ...entry, createdAt: new Date(entry.createdAt).toISOString() }));
+
+  res.status(200).json(activity);
 });
 
 app.get("/pay/:id", (req, res, next) => {
