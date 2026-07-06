@@ -6,11 +6,17 @@
  */
 
 import express from "express";
+import cors from "cors";
 import { createGatewayMiddleware } from "@circle-fin/x402-batching/server";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 const app = express();
 app.use(express.json());
+// Allows the web/ frontend (localhost:3001, later its production domain) to
+// call this API directly from the browser. Wide open for local development -
+// restrict this to the actual production frontend origin before public
+// deployment.
+app.use(cors());
 
 const SELLER_ADDRESS = process.env.SELLER_ADDRESS as `0x${string}` | undefined;
 
@@ -46,10 +52,14 @@ if (!SELLER_ADDRESS) {
   process.exit(1);
 }
 
+// Named so /pricing can expose the real value instead of a second, drifting
+// copy of the literal.
+const NETWORK = "eip155:5042002";
+
 const gateway = createGatewayMiddleware({
   sellerAddress: SELLER_ADDRESS,
   facilitatorUrl: "https://gateway-api-testnet.circle.com",
-  networks: ["eip155:5042002"],
+  networks: [NETWORK],
 });
 
 type QuoteState = "OPEN" | "PROCESSING" | "FULFILLED";
@@ -237,6 +247,20 @@ app.get("/activity", (req, res) => {
     .map((entry) => ({ ...entry, createdAt: new Date(entry.createdAt).toISOString() }));
 
   res.status(200).json(activity);
+});
+
+// GET /pricing - read-only pricing configuration: the real cost floor and
+// ask price /quote negotiates against for each tool, plus the seller
+// address and settlement network, straight from this file's own constants
+// (never a second, hand-copied set of numbers). Purely additive - no
+// negotiation logic here.
+app.get("/pricing", (_req, res) => {
+  const tools = Object.keys(COST_FLOOR_USDC).map((tool) => ({
+    tool,
+    costFloor: COST_FLOOR_USDC[tool],
+    askPrice: ASK_PRICE_USDC[tool],
+  }));
+  res.status(200).json({ sellerAddress: SELLER_ADDRESS, network: NETWORK, tools });
 });
 
 app.get("/pay/:id", (req, res, next) => {

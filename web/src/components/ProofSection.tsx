@@ -1,40 +1,7 @@
-const ACTIVITY_API_URL = process.env.QUOTE_API_URL ?? "http://localhost:3000";
-
-const TOOL_LABELS: Record<string, string> = {
-  get_btc_cycle_regime: "BTC Cycle Regime",
-  get_entry_risk: "Entry Risk",
-  get_lth_behavior: "LTH Behavior",
-  compare_to_2021_top: "Compare to 2021 Top",
-  get_nupl_sentiment: "NUPL Sentiment",
-};
-
-interface ActivityRecord {
-  quoteId: string | null;
-  negotiationId: string;
-  round: number;
-  tool: string;
-  decision: "accepted" | "countered" | "rejected";
-  agreedPrice: number | null;
-  createdAt: string;
-  state: "OPEN" | "PROCESSING" | "FULFILLED" | null;
-}
-
-// Server-side fetch (runs on the Next.js server, not in the browser) so this
-// isn't subject to the real backend's missing CORS headers the way a
-// client-side fetch would be. cache: "no-store" keeps this live on every
-// request rather than baking a snapshot in at build time.
-async function getActivity(): Promise<ActivityRecord[]> {
-  try {
-    const res = await fetch(`${ACTIVITY_API_URL}/activity?limit=20`, { cache: "no-store" });
-    if (!res.ok) return [];
-    return (await res.json()) as ActivityRecord[];
-  } catch {
-    return [];
-  }
-}
+import { TOOL_LABELS, getActivity } from "@/lib/activity";
 
 export default async function ProofSection() {
-  const activity = await getActivity();
+  const activity = await getActivity(20);
 
   // Prioritize a genuinely FULFILLED (paid + delivered) record; fall back to
   // the most recent accepted-but-unpaid one. /activity is already sorted

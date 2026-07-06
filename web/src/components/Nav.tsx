@@ -3,8 +3,10 @@
 import { useState } from "react";
 
 const LINKS = [
-  { href: "#how-it-works", label: "How It Works" },
-  { href: "#try-it", label: "Try It" },
+  { href: "/#how-it-works", label: "How It Works" },
+  { href: "/#try-it", label: "Try It" },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/docs", label: "Docs" },
 ];
 
 export default function Nav() {
