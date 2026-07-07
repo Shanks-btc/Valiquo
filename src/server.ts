@@ -367,17 +367,40 @@ gateway.onBeforeVerify(async (ctx: any) => {
 
 // PROCESSING -> OPEN recovery: a transient verify/settle failure must not
 // permanently lock a quote out of being paid again.
-gateway.onVerifyFailure(async () => {
+//
+// Diagnostic logging: onVerifyFailure/onSettleFailure only fire when the SDK
+// call itself throws - a *different* failure class from a normal API
+// response with success:false (e.g. Circle's settle endpoint responding
+// with {success:false, errorReason:"..."}), which is what actually produces
+// the generic "Payment settlement failed" the client sees. That case never
+// throws, so it never reaches these two hooks - onAfterSettle below is the
+// only hook that sees it, since it runs on every settle attempt regardless
+// of outcome.
+gateway.onVerifyFailure(async (ctx: any) => {
+  console.error(`[verify threw] quote=${quoteContext.getStore() ?? "unknown"}:`, ctx?.error?.message ?? ctx?.error);
   const quote = quotes.get(quoteContext.getStore() ?? "");
   if (quote?.state === "PROCESSING") {
     quote.state = "OPEN";
   }
 });
 
-gateway.onSettleFailure(async () => {
+gateway.onSettleFailure(async (ctx: any) => {
+  console.error(`[settle threw] quote=${quoteContext.getStore() ?? "unknown"}:`, ctx?.error?.message ?? ctx?.error);
   const quote = quotes.get(quoteContext.getStore() ?? "");
   if (quote?.state === "PROCESSING") {
     quote.state = "OPEN";
+  }
+});
+
+// Fires on every settle attempt (success or a normal failed-result response)
+// - the real errorReason from Circle's Gateway API for the soft-failure case
+// described above.
+gateway.onAfterSettle(async (ctx: any) => {
+  if (!ctx?.result?.success) {
+    console.error(
+      `[settle failed] quote=${quoteContext.getStore() ?? "unknown"} network=${ctx?.result?.network}:`,
+      ctx?.result?.errorReason ?? "(no errorReason provided)"
+    );
   }
 });
 
