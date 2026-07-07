@@ -9,8 +9,55 @@
 // The signed payload is sent back as a base64 JSON `Payment-Signature`
 // request header, matching the server package's own decode logic at
 // node_modules/@circle-fin/x402-batching/dist/server/index.js.
+//
+// Before signing, this also checks the buyer's Gateway *available* balance
+// (a separate pool from their plain wallet USDC balance - funds only count
+// for payment once deposited into the GatewayWallet contract) and, if it's
+// short, deposits automatically. GatewayClient.deposit() in the SDK requires
+// a raw private key (node_modules/@circle-fin/x402-batching/dist/client/
+// index.js) and can't be used in a browser with an injected wallet, so the
+// same approve+deposit contract calls it makes are replicated here via viem
+// against window.ethereum, using the exact GATEWAY_WALLET_ABI from that
+// same compiled source - not a hand-guessed ABI.
+
+import {
+  createPublicClient,
+  createWalletClient,
+  custom,
+  parseUnits,
+  formatUnits,
+  erc20Abi,
+  type Address,
+} from "viem";
 
 const GATEWAY_AUTH_VALIDITY_WINDOW_SECONDS = 7 * 24 * 60 * 60 + 100; // matches SDK constant
+
+// Deposit at least this much (in whole USDC) when topping up Gateway balance,
+// so a buyer doesn't have to re-deposit before every single small payment.
+const MIN_DEPOSIT_USDC = "1";
+
+const GATEWAY_WALLET_ABI = [
+  {
+    name: "deposit",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "value", type: "uint256" },
+    ],
+    outputs: [],
+  },
+  {
+    name: "availableBalance",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "depositor", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+] as const;
 
 interface PaymentRequirements {
   scheme: string;
@@ -52,7 +99,10 @@ function base64Decode<T>(value: string): T {
   return JSON.parse(atob(value)) as T;
 }
 
-export async function payWithWallet(payUrl: string): Promise<WalletPayResult> {
+export async function payWithWallet(
+  payUrl: string,
+  onProgress?: (message: string) => void | Promise<void>
+): Promise<WalletPayResult> {
   const eth = (window as any).ethereum;
   if (!eth) {
     throw new Error("Install MetaMask (or a compatible wallet) to pay.");
@@ -89,8 +139,87 @@ export async function payWithWallet(payUrl: string): Promise<WalletPayResult> {
   }
   const chainId = parseInt(requirements.network.split(":")[1], 10);
 
+  // Step 1b: check Gateway *available* balance (a separate pool from the
+  // buyer's plain wallet USDC balance - only funds deposited into the
+  // GatewayWallet contract count toward a payment) and auto-deposit if
+  // short, instead of requiring the buyer to have run a manual deposit
+  // script beforehand.
+  const usdcAddress = requirements.asset as Address;
+  const gatewayWallet = verifyingContract as Address;
+  const requiredAmount = BigInt(requirements.amount);
+
+  const publicClient = createPublicClient({ transport: custom(eth) });
+  const walletClient = createWalletClient({ account: buyer as Address, transport: custom(eth) });
+
+  const availableBalance = await publicClient.readContract({
+    address: gatewayWallet,
+    abi: GATEWAY_WALLET_ABI,
+    functionName: "availableBalance",
+    args: [usdcAddress, buyer as Address],
+  });
+
+  if (availableBalance < requiredAmount) {
+    const walletUsdcBalance = await publicClient.readContract({
+      address: usdcAddress,
+      abi: erc20Abi,
+      functionName: "balanceOf",
+      args: [buyer as Address],
+    });
+
+    if (walletUsdcBalance < requiredAmount) {
+      throw new Error(
+        `Insufficient testnet USDC. Your wallet holds $${formatUnits(walletUsdcBalance, 6)} but this payment needs $${formatUnits(requiredAmount, 6)}. Get free testnet USDC at https://faucet.circle.com, then try again.`
+      );
+    }
+
+    const roundedMinimum = parseUnits(MIN_DEPOSIT_USDC, 6);
+    const desiredDeposit = requiredAmount > roundedMinimum ? requiredAmount : roundedMinimum;
+    const depositAmount = walletUsdcBalance < desiredDeposit ? walletUsdcBalance : desiredDeposit;
+
+    await onProgress?.(
+      `> Gateway balance insufficient — depositing $${formatUnits(depositAmount, 6)} first...`
+    );
+
+    try {
+      const allowance = await publicClient.readContract({
+        address: usdcAddress,
+        abi: erc20Abi,
+        functionName: "allowance",
+        args: [buyer as Address, gatewayWallet],
+      });
+
+      if (allowance < depositAmount) {
+        const approveHash = await walletClient.writeContract({
+          chain: null,
+          address: usdcAddress,
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [gatewayWallet, depositAmount],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: approveHash });
+      }
+
+      const depositHash = await walletClient.writeContract({
+        chain: null,
+        address: gatewayWallet,
+        abi: GATEWAY_WALLET_ABI,
+        functionName: "deposit",
+        args: [usdcAddress, depositAmount],
+      });
+      await publicClient.waitForTransactionReceipt({ hash: depositHash });
+    } catch (err: any) {
+      if (err?.code === 4001 || err?.cause?.code === 4001) {
+        throw new Error("Deposit transaction rejected in wallet.");
+      }
+      throw new Error(err?.shortMessage ?? err?.message ?? "Gateway deposit failed.");
+    }
+
+    await onProgress?.("> Deposit confirmed. Proceeding with payment...");
+  }
+
   // Step 2: build + sign the EIP-3009 TransferWithAuthorization exactly like
   // BatchEvmScheme.signAuthorization does.
+  await onProgress?.("> Building and signing payment authorization (EIP-712)...");
   const now = Math.floor(Date.now() / 1000);
   const validityWindowSeconds = Math.max(requirements.maxTimeoutSeconds, GATEWAY_AUTH_VALIDITY_WINDOW_SECONDS);
   const authorization = {

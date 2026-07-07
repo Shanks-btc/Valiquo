@@ -157,8 +157,7 @@ export default function NegotiationSection() {
 
     try {
       const fullPayUrl = payUrl.startsWith("http") ? payUrl : `${API_ORIGIN}${payUrl}`;
-      await appendLine("> Building and signing payment authorization (EIP-712)...");
-      const result = await payWithWallet(fullPayUrl);
+      const result = await payWithWallet(fullPayUrl, appendLine);
       await appendLine("> Payment verified and settled on Arc Testnet.");
       if (result.payerAddress) {
         setPayerAddress(result.payerAddress);
